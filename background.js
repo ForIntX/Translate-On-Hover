@@ -8,6 +8,7 @@ const DEFAULT_GET_CHUNK_LENGTH = 450;
 const DEFAULT_POST_CHUNK_LENGTH = 1100;
 const translationCache = new Map(); // key: `${text}_${targetLang}_${mode}` -> {translation, detectedLang}
 const requestQueue = [];
+const cancelledRequestIds = new Set(); // kullanıcının vazgeçtiği (kart kapatılan) istekler
 let isProcessing = false;
 
 const UI_TEXT = {
@@ -55,6 +56,18 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
     handleTranslateRequest(request, sendResponse);
     return true; // asenkron cevap için gerekli
   }
+  if (request.action === "cancelTranslation") {
+    if (request.requestId != null) {
+      cancelledRequestIds.add(request.requestId);
+      // Kuyrukta hâlâ bekliyorsa direkt çıkar; bu kuyruğu tıkamasın.
+      for (let i = requestQueue.length - 1; i >= 0; i--) {
+        if (requestQueue[i].requestId === request.requestId) {
+          requestQueue.splice(i, 1);
+        }
+      }
+    }
+    return false;
+  }
 });
 
 async function handleTranslateRequest(request, sendResponse) {
@@ -63,6 +76,7 @@ async function handleTranslateRequest(request, sendResponse) {
   const uiLang = getUiLang(request.uiLang);
   const shouldChunk = request.chunk === true;
   const cacheKey = `${text.toLowerCase()}_${targetLang}_${shouldChunk ? "chunked" : "single"}`;
+  const requestId = request.requestId;
 
   if (!text) {
     sendResponse({ error: getText(uiLang, "emptyText") });
@@ -85,9 +99,15 @@ async function handleTranslateRequest(request, sendResponse) {
     return;
   }
 
+  // Beklerken zaten iptal edilmişse (kart hemen kapatıldıysa) hiç kuyruğa girme
+  if (requestId != null && cancelledRequestIds.has(requestId)) {
+    cancelledRequestIds.delete(requestId);
+    return;
+  }
+
   // 3. Kuyruğa ekle (aynı kelime+dil için bekleyen başka istekler varsa, hepsi
   //    tek API çağrısıyla birlikte cevaplanacak)
-  requestQueue.push({ text, targetLang, uiLang, cacheKey, apiConfig, shouldChunk, sendResponse });
+  requestQueue.push({ text, targetLang, uiLang, cacheKey, apiConfig, shouldChunk, requestId, sendResponse });
   processQueue();
 }
 
@@ -96,7 +116,7 @@ function processQueue() {
   isProcessing = true;
 
   const job = requestQueue.shift();
-  const { text, targetLang, uiLang, cacheKey, apiConfig, shouldChunk } = job;
+  const { text, targetLang, uiLang, cacheKey, apiConfig, shouldChunk, requestId } = job;
 
   const sameKeyJobs = [job];
   for (let i = requestQueue.length - 1; i >= 0; i--) {
@@ -105,10 +125,20 @@ function processQueue() {
     }
   }
 
+  const isCancelled = () => requestId != null && cancelledRequestIds.has(requestId);
+
   // API'yi yormamak için istekler arası minik bekleme
   setTimeout(() => {
-    translateText(text, targetLang, apiConfig, { chunk: shouldChunk })
+    if (isCancelled()) {
+      cancelledRequestIds.delete(requestId);
+      isProcessing = false;
+      processQueue();
+      return;
+    }
+
+    translateText(text, targetLang, apiConfig, { chunk: shouldChunk, isCancelled })
       .then((result) => {
+        if (result && result.cancelled) return;
         translationCache.set(cacheKey, result);
         for (const j of sameKeyJobs) j.sendResponse(result);
       })
@@ -119,6 +149,7 @@ function processQueue() {
         }
       })
       .finally(() => {
+        if (requestId != null) cancelledRequestIds.delete(requestId);
         isProcessing = false;
         processQueue();
       });
@@ -126,6 +157,8 @@ function processQueue() {
 }
 
 async function translateText(text, targetLang, apiConfig, options = {}) {
+  const isCancelled = options.isCancelled || (() => false);
+
   if (!options.chunk) {
     return fetchFromCustomApi(text, targetLang, apiConfig);
   }
@@ -142,9 +175,12 @@ async function translateText(text, targetLang, apiConfig, options = {}) {
   let translatedChunkCount = 0;
 
   for (const group of groups) {
+    if (isCancelled()) return { cancelled: true };
     const translatedChunks = [];
 
     for (const chunk of group) {
+      if (isCancelled()) return { cancelled: true };
+
       const result = await fetchFromCustomApi(chunk, targetLang, apiConfig);
       translatedChunks.push(result.translation.trim());
       translatedChunkCount++;

@@ -7,6 +7,8 @@ let panelWordTimer = null;
 let currentPanelHoveredWord = "";
 let currentPanelWordRect = null;
 let currentTooltipAnchorRect = null;
+let selectionRequestId = 0; // her seçim çevirisi başlatıldığında artar; eski cevapları geçersiz kılmak için
+let activeSelectionTranslationId = null; // background'a gönderilmiş, henüz sonuçlanmamış istek id'si (varsa)
 
 let settings = {
   enabled: true,
@@ -231,7 +233,10 @@ function showSelectionButton(rect, text) {
   btn.addEventListener("click", (e) => {
     e.stopPropagation();
     removeSelectionButton();
+
     showSelectionCard(text, getText("translating"));
+    const requestId = ++selectionRequestId;
+    activeSelectionTranslationId = requestId;
 
     chrome.runtime.sendMessage(
       {
@@ -240,8 +245,17 @@ function showSelectionButton(rect, text) {
         targetLang: settings.targetLang,
         uiLang: settings.interfaceLang,
         chunk: true,
+        requestId,
       },
       (response) => {
+        if (activeSelectionTranslationId === requestId) {
+          activeSelectionTranslationId = null;
+        }
+
+        // Bu istek artık geçerli değilse (kart kapatıldı veya yeni bir
+        // çeviri başlatıldı) gelen cevabı tamamen yok say.
+        if (requestId !== selectionRequestId) return;
+
         if (chrome.runtime.lastError) {
           updateSelectionCard(getText("translationUnavailable"), true);
           return;
@@ -326,6 +340,12 @@ function removeSelectionCard() {
   const card = document.getElementById("qt-selection-card");
   if (card) card.remove();
   clearPanelWordHover();
+  selectionRequestId++; // bekleyen eski çeviri cevabını geçersiz kıl
+
+  if (activeSelectionTranslationId !== null) {
+    chrome.runtime.sendMessage({ action: "cancelTranslation", requestId: activeSelectionTranslationId });
+    activeSelectionTranslationId = null;
+  }
 }
 
 function getSelectedText(selection) {
