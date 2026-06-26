@@ -13,6 +13,7 @@ let settings = {
   interfaceLang: "tr",
   targetLang: "tr",
   delay: 400,
+  triggerMode: "hover", // "hover" = üstüne gelince çevir, "click" = üstüne gelip tıklayınca çevir
 };
 
 const UI_TEXT = {
@@ -37,7 +38,7 @@ function getText(key) {
   return UI_TEXT[lang][key] || UI_TEXT.tr[key] || key;
 }
 
-chrome.storage.sync.get(["enabled", "interfaceLang", "targetLang", "delay"], (data) => {
+chrome.storage.sync.get(["enabled", "interfaceLang", "targetLang", "delay", "triggerMode"], (data) => {
   settings = { ...settings, ...data };
 });
 
@@ -56,6 +57,12 @@ chrome.storage.onChanged.addListener((changes) => {
     currentHoveredWord = "";
     hasActiveSelection = false;
   }
+  if (changes.triggerMode) {
+    clearTimeout(hoverTimer);
+    removeTooltip();
+    removeHighlight();
+    currentHoveredWord = "";
+  }
 });
 
 function isEditable(target) {
@@ -68,6 +75,7 @@ function isEditable(target) {
 
 document.addEventListener("mousemove", (event) => {
   if (!settings.enabled) return;
+  if (settings.triggerMode === "click") return; // tıklama modunda hover ile tetiklenmez
   if (hasActiveSelection) return; // bir cümle seçiliyken kelime hover'ı devre dışı
   if (event.target.closest && event.target.closest(".qt-selection-ui")) {
     resetPageHover();
@@ -96,37 +104,65 @@ document.addEventListener("mousemove", (event) => {
   const clientY = event.clientY;
 
   hoverTimer = setTimeout(() => {
-    currentHoveredWord = wordData.word;
-
-    // Kelimenin çevresini vurgula
-    showHighlight(wordData.range);
-
-    // Kutucuğu göster (başlangıçta "...")
-    showTooltip(clientX, clientY, "...");
-
-    chrome.runtime.sendMessage(
-      {
-        action: "translate",
-        text: wordData.word,
-        targetLang: settings.targetLang,
-        uiLang: settings.interfaceLang,
-      },
-      (response) => {
-        if (chrome.runtime.lastError) {
-          updateTooltip(getText("error"), true);
-          return;
-        }
-        if (response && response.translation) {
-          updateTooltip(response.translation);
-        } else if (response && response.error) {
-          updateTooltip(response.error, true);
-        } else {
-          updateTooltip(getText("error"), true);
-        }
-      }
-    );
+    triggerWordTranslation(wordData, clientX, clientY);
   }, settings.delay);
 });
+
+// Tıklama modu: kelimenin üstüne gelip tıklayınca çevir
+document.addEventListener("click", (event) => {
+  if (!settings.enabled) return;
+  if (settings.triggerMode !== "click") return;
+  if (event.target.closest && event.target.closest(".qt-selection-ui")) return;
+  if (document.getElementById("qt-selection-card")) return;
+  if (isEditable(event.target)) return;
+
+  // Sürükleyerek bir metin seçildiyse, bu bir kelime tıklaması değildir;
+  // seçim akışı (mouseup) zaten devreye girer.
+  const selection = window.getSelection();
+  if (selection && !selection.isCollapsed && getSelectedText(selection).length >= 2) return;
+
+  const wordData = getWordDataAtPoint(event.clientX, event.clientY);
+  if (!wordData) {
+    resetPageHover();
+    return;
+  }
+
+  if (wordData.word === currentHoveredWord) return; // aynı kelimeye tekrar tıklama, kutucuk zaten açık
+
+  triggerWordTranslation(wordData, event.clientX, event.clientY);
+});
+
+function triggerWordTranslation(wordData, clientX, clientY) {
+  currentHoveredWord = wordData.word;
+
+  // Kelimenin çevresini vurgula
+  showHighlight(wordData.range);
+
+  // Kutucuğu göster (başlangıçta "...")
+  showTooltip(clientX, clientY, "...");
+
+  chrome.runtime.sendMessage(
+    {
+      action: "translate",
+      text: wordData.word,
+      targetLang: settings.targetLang,
+      uiLang: settings.interfaceLang,
+    },
+    (response) => {
+      if (chrome.runtime.lastError) {
+        updateTooltip(getText("error"), true);
+        return;
+      }
+      if (response && response.translation) {
+        updateTooltip(response.translation);
+      } else if (response && response.error) {
+        updateTooltip(response.error, true);
+      } else {
+        updateTooltip(getText("error"), true);
+      }
+    }
+  );
+}
 
 // Tıklama veya scroll durumunda temizle
 document.addEventListener("mousedown", (event) => {
@@ -137,6 +173,9 @@ document.addEventListener("mousedown", (event) => {
   removeSelectionButton();
   removeSelectionCard();
   hasActiveSelection = false;
+  if (settings.triggerMode === "click") {
+    currentHoveredWord = "";
+  }
 });
 window.addEventListener("scroll", () => {
   removeTooltip();

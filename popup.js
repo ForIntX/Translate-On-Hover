@@ -1,7 +1,9 @@
 const enabledEl = document.getElementById("enabled");
 const interfaceLangEl = document.getElementById("interfaceLang");
 const targetLangEl = document.getElementById("targetLang");
+const triggerModeEl = document.getElementById("triggerMode");
 const delayEl = document.getElementById("delay");
+const delayFieldEl = delayEl.closest(".field");
 
 const apiPasteEl = document.getElementById("apiPaste");
 const saveApiBtn = document.getElementById("saveApi");
@@ -15,6 +17,9 @@ const UI_TEXT = {
     interfaceLanguage: "Uygulama dili",
     enabled: "Etkin",
     targetLanguage: "Hedef dil",
+    triggerMode: "Çeviri nasıl tetiklensin?",
+    triggerModeHover: "Üstüne gelince çevir",
+    triggerModeClick: "Üstüne gelip tıklayınca çevir",
     delay: "Bekleme (ms)",
     translationApi: "Çeviri API'si",
     noApiWarning: "⚠️ Henüz bir çeviri API'si eklemediniz. Çeviri çalışmayacak.",
@@ -44,6 +49,9 @@ const UI_TEXT = {
     interfaceLanguage: "App language",
     enabled: "Enabled",
     targetLanguage: "Target language",
+    triggerMode: "When should translation trigger?",
+    triggerModeHover: "Translate on hover",
+    triggerModeClick: "Translate on click",
     delay: "Delay (ms)",
     translationApi: "Translation API",
     noApiWarning: "⚠️ You have not added a translation API yet. Translation will not work.",
@@ -106,13 +114,15 @@ function updateNoApiWarning(hasApi) {
 
 // Mevcut ayarları yükle
 chrome.storage.sync.get(
-  { enabled: true, interfaceLang: "tr", targetLang: "tr", delay: 400, apiConfig: null },
+  { enabled: true, interfaceLang: "tr", targetLang: "tr", delay: 400, triggerMode: "hover", apiConfig: null },
   (data) => {
     interfaceLangEl.value = data.interfaceLang;
     enabledEl.checked = data.enabled;
     targetLangEl.value = data.targetLang;
+    triggerModeEl.value = data.triggerMode;
     delayEl.value = data.delay;
     applyInterfaceLanguage(data.interfaceLang);
+    updateDelayFieldVisibility(data.triggerMode);
 
     if (data.apiConfig && data.apiConfig.url) {
       apiPasteEl.value = JSON.stringify(data.apiConfig, null, 2);
@@ -122,6 +132,17 @@ chrome.storage.sync.get(
     }
   }
 );
+
+function updateDelayFieldVisibility(mode) {
+  if (delayFieldEl) {
+    delayFieldEl.style.display = mode === "click" ? "none" : "";
+  }
+}
+
+triggerModeEl.addEventListener("change", () => {
+  chrome.storage.sync.set({ triggerMode: triggerModeEl.value });
+  updateDelayFieldVisibility(triggerModeEl.value);
+});
 
 interfaceLangEl.addEventListener("change", () => {
   applyInterfaceLanguage(interfaceLangEl.value);
