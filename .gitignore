@@ -1,0 +1,16 @@
+# İşletim sistemi dosyaları
+.DS_Store
+Thumbs.db
+
+# Paketlenmiş eklenti dosyaları
+*.zip
+*.crx
+*.pem
+
+# Editör dosyaları
+.vscode/
+.idea/
+*.swp
+
+# Node (varsa ileride build aracı eklenirse)
+node_modules/

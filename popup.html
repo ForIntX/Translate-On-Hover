@@ -1,0 +1,214 @@
+<!DOCTYPE html>
+<html lang="tr">
+<head>
+  <meta charset="UTF-8" />
+  <title>Translate on Hover</title>
+  <style>
+    body {
+      width: 300px;
+      font-family: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+      padding: 14px;
+      margin: 0;
+      color: #2c3e50;
+    }
+    h1 {
+      font-size: 15px;
+      margin: 0 0 12px;
+    }
+    h2 {
+      font-size: 12px;
+      text-transform: uppercase;
+      letter-spacing: 0.04em;
+      color: #7f8c8d;
+      margin: 16px 0 8px;
+      border-top: 1px solid #ecf0f1;
+      padding-top: 12px;
+    }
+    .row {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      margin-bottom: 12px;
+    }
+    label { font-size: 13px; }
+    select, input[type="text"], input[type="number"], textarea {
+      font-size: 12px;
+      padding: 5px 6px;
+      border-radius: 4px;
+      border: 1px solid #ccc;
+      font-family: inherit;
+      width: 100%;
+      box-sizing: border-box;
+    }
+    .field {
+      margin-bottom: 10px;
+    }
+    .field label {
+      display: block;
+      font-size: 11px;
+      color: #7f8c8d;
+      margin-bottom: 3px;
+    }
+    .switch { position: relative; width: 40px; height: 22px; flex-shrink: 0; }
+    .switch input { display: none; }
+    .slider {
+      position: absolute;
+      cursor: pointer;
+      inset: 0;
+      background-color: #ccc;
+      border-radius: 22px;
+      transition: 0.2s;
+    }
+    .slider::before {
+      content: "";
+      position: absolute;
+      width: 18px;
+      height: 18px;
+      left: 2px;
+      top: 2px;
+      background-color: white;
+      border-radius: 50%;
+      transition: 0.2s;
+    }
+    input:checked + .slider { background-color: #c0392b; }
+    input:checked + .slider::before { transform: translateX(18px); }
+    .hint {
+      font-size: 11px;
+      color: #888;
+      margin-top: -4px;
+      margin-bottom: 10px;
+      line-height: 1.4;
+    }
+    textarea#apiPaste {
+      min-height: 80px;
+      resize: vertical;
+      font-family: ui-monospace, Menlo, Consolas, monospace;
+      font-size: 11px;
+    }
+    button#saveApi {
+      width: 100%;
+      padding: 8px;
+      background: #2980b9;
+      color: white;
+      border: none;
+      border-radius: 6px;
+      font-size: 13px;
+      font-weight: 600;
+      cursor: pointer;
+      margin-top: 4px;
+    }
+    button#saveApi:hover { background: #21618c; }
+    #apiStatus {
+      font-size: 11px;
+      padding: 6px 8px;
+      border-radius: 4px;
+      margin-top: 8px;
+      display: none;
+    }
+    #apiStatus.success {
+      display: block;
+      background: #e8f8f0;
+      color: #1e7a4f;
+    }
+    #apiStatus.error {
+      display: block;
+      background: #fdecea;
+      color: #c0392b;
+    }
+    .no-api-warning {
+      font-size: 11px;
+      background: #fff8e1;
+      color: #8a6d00;
+      padding: 8px;
+      border-radius: 6px;
+      margin-bottom: 10px;
+      line-height: 1.4;
+    }
+    details summary {
+      font-size: 11px;
+      color: #2980b9;
+      cursor: pointer;
+      margin-top: 8px;
+    }
+    details {
+      margin-top: 6px;
+    }
+    .example-box {
+      background: #f8f9fa;
+      border-radius: 6px;
+      padding: 8px;
+      margin-top: 6px;
+      font-family: ui-monospace, Menlo, Consolas, monospace;
+      font-size: 10px;
+      line-height: 1.5;
+      white-space: pre-wrap;
+      word-break: break-all;
+      color: #555;
+    }
+  </style>
+</head>
+<body>
+  <h1>🔤 Translate on Hover</h1>
+
+  <div class="row">
+    <label for="enabled">Etkin</label>
+    <label class="switch">
+      <input type="checkbox" id="enabled" />
+      <span class="slider"></span>
+    </label>
+  </div>
+
+  <div class="field">
+    <label for="targetLang">Hedef dil</label>
+    <select id="targetLang">
+      <option value="tr">Türkçe</option>
+      <option value="en">İngilizce</option>
+      <option value="de">Almanca</option>
+      <option value="fr">Fransızca</option>
+      <option value="es">İspanyolca</option>
+      <option value="ru">Rusça</option>
+      <option value="ar">Arapça</option>
+      <option value="it">İtalyanca</option>
+      <option value="ja">Japonca</option>
+    </select>
+  </div>
+
+  <div class="field">
+    <label for="delay">Bekleme (ms)</label>
+    <input type="number" id="delay" min="0" max="2000" step="50" />
+  </div>
+
+  <h2>Çeviri API'si</h2>
+  <div class="no-api-warning" id="noApiWarning">
+    ⚠️ Henüz bir çeviri API'si eklemediniz. Çeviri çalışmayacak.
+  </div>
+
+  <div class="field">
+    <label for="apiPaste">API yapılandırmanı buraya yapıştır (JSON)</label>
+    <textarea id="apiPaste" placeholder='{"url": "...", "method": "POST", "headers": {...}, "bodyTemplate": "...", "responsePath": "..."}'></textarea>
+  </div>
+
+  <details>
+    <summary>JSON formatı nasıl olmalı?</summary>
+    <div class="example-box">{
+  "url": "https://.../translate",
+  "method": "POST",
+  "headers": { "Authorization": "Bearer xxx" },
+  "bodyTemplate": "{\"q\":\"{{text}}\",\"target\":\"{{targetLang}}\"}",
+  "responsePath": "data.translations.0.translatedText"
+}</div>
+    <div class="hint">
+      <code>{{text}}</code> ve <code>{{targetLang}}</code> yer tutucuları
+      URL veya bodyTemplate içinde otomatik değiştirilir. GET istekleri için
+      headers ve bodyTemplate'i boş bırakabilirsiniz. Hazır örnekler
+      (DeepL, LibreTranslate, Google Cloud Translate, MyMemory) için
+      projenin README dosyasına bakın.
+    </div>
+  </details>
+
+  <button id="saveApi">Kaydet</button>
+  <div id="apiStatus"></div>
+
+  <script src="popup.js"></script>
+</body>
+</html>
