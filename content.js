@@ -86,12 +86,7 @@ document.addEventListener("mousemove", (event) => {
           return;
         }
         if (response && response.translation) {
-          // Çeviri kaynak kelimeyle birebir aynıysa göstermeye değmez
-          if (response.translation.trim().toLowerCase() === wordData.word.trim().toLowerCase()) {
-            removeTooltip();
-            removeHighlight();
-            return;
-          }
+        
           updateTooltip(response.translation);
         } else if (response && response.error) {
           updateTooltip(response.error, true);
