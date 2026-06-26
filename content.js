@@ -10,17 +10,43 @@ let currentTooltipAnchorRect = null;
 
 let settings = {
   enabled: true,
+  interfaceLang: "tr",
   targetLang: "tr",
   delay: 400,
 };
 
-chrome.storage.sync.get(["enabled", "targetLang", "delay"], (data) => {
+const UI_TEXT = {
+  tr: {
+    error: "Hata!",
+    translateButton: "🌐 Çevir",
+    translating: "Çevriliyor...",
+    translationUnavailable: "Çeviri alınamadı.",
+    translationLabel: "↓ çeviri",
+  },
+  en: {
+    error: "Error!",
+    translateButton: "🌐 Translate",
+    translating: "Translating...",
+    translationUnavailable: "Could not get translation.",
+    translationLabel: "↓ translation",
+  },
+};
+
+function getText(key) {
+  const lang = UI_TEXT[settings.interfaceLang] ? settings.interfaceLang : "tr";
+  return UI_TEXT[lang][key] || UI_TEXT.tr[key] || key;
+}
+
+chrome.storage.sync.get(["enabled", "interfaceLang", "targetLang", "delay"], (data) => {
   settings = { ...settings, ...data };
 });
 
 chrome.storage.onChanged.addListener((changes) => {
   for (const key in changes) {
     settings[key] = changes[key].newValue;
+  }
+  if (changes.interfaceLang) {
+    updateVisibleInterfaceText();
   }
   if (changes.enabled && changes.enabled.newValue === false) {
     removeTooltip();
@@ -79,19 +105,23 @@ document.addEventListener("mousemove", (event) => {
     showTooltip(clientX, clientY, "...");
 
     chrome.runtime.sendMessage(
-      { action: "translate", text: wordData.word, targetLang: settings.targetLang },
+      {
+        action: "translate",
+        text: wordData.word,
+        targetLang: settings.targetLang,
+        uiLang: settings.interfaceLang,
+      },
       (response) => {
         if (chrome.runtime.lastError) {
-          updateTooltip("Hata!", true);
+          updateTooltip(getText("error"), true);
           return;
         }
         if (response && response.translation) {
-        
           updateTooltip(response.translation);
         } else if (response && response.error) {
           updateTooltip(response.error, true);
         } else {
-          updateTooltip("Hata!", true);
+          updateTooltip(getText("error"), true);
         }
       }
     );
@@ -157,18 +187,24 @@ function showSelectionButton(rect, text) {
   const btn = document.createElement("button");
   btn.id = "qt-selection-button";
   btn.className = "qt-selection-ui";
-  btn.innerText = "🌐 Çevir";
+  btn.innerText = getText("translateButton");
 
   btn.addEventListener("click", (e) => {
     e.stopPropagation();
     removeSelectionButton();
-    showSelectionCard(text, "Çevriliyor...");
+    showSelectionCard(text, getText("translating"));
 
     chrome.runtime.sendMessage(
-      { action: "translate", text, targetLang: settings.targetLang, chunk: true },
+      {
+        action: "translate",
+        text,
+        targetLang: settings.targetLang,
+        uiLang: settings.interfaceLang,
+        chunk: true,
+      },
       (response) => {
         if (chrome.runtime.lastError) {
-          updateSelectionCard("Çeviri alınamadı.", true);
+          updateSelectionCard(getText("translationUnavailable"), true);
           return;
         }
         if (response && response.translation) {
@@ -176,7 +212,7 @@ function showSelectionButton(rect, text) {
         } else if (response && response.error) {
           updateSelectionCard(response.error, true);
         } else {
-          updateSelectionCard("Çeviri alınamadı.", true);
+          updateSelectionCard(getText("translationUnavailable"), true);
         }
       }
     );
@@ -216,11 +252,12 @@ function showSelectionCard(originalText, translatedPlaceholder) {
 
   const arrowEl = document.createElement("div");
   arrowEl.className = "qt-card-arrow";
-  arrowEl.innerText = "↓ çeviri";
+  arrowEl.innerText = getText("translationLabel");
 
   const translatedEl = document.createElement("div");
   translatedEl.className = "qt-card-translated qt-card-text";
   translatedEl.id = "qt-card-translated-text";
+  translatedEl.dataset.state = "loading";
   translatedEl.tabIndex = 0;
   translatedEl.innerText = translatedPlaceholder;
 
@@ -240,6 +277,7 @@ function showSelectionCard(originalText, translatedPlaceholder) {
 function updateSelectionCard(text, isError = false) {
   const el = document.getElementById("qt-card-translated-text");
   if (el) {
+    el.dataset.state = isError ? "error" : "ready";
     el.innerText = text;
     el.classList.toggle("qt-error", isError);
   }
@@ -325,10 +363,15 @@ function handlePanelWordMouseMove(event) {
   panelWordTimer = setTimeout(() => {
     showCardWordTooltip("...");
     chrome.runtime.sendMessage(
-      { action: "translate", text: wordData.word, targetLang: settings.targetLang },
+      {
+        action: "translate",
+        text: wordData.word,
+        targetLang: settings.targetLang,
+        uiLang: settings.interfaceLang,
+      },
       (response) => {
         if (chrome.runtime.lastError) {
-          updateCardWordTooltip("Hata!", true);
+          updateCardWordTooltip(getText("error"), true);
           return;
         }
         if (!document.getElementById("qt-selection-card") || currentPanelHoveredWord !== wordData.word) {
@@ -339,7 +382,7 @@ function handlePanelWordMouseMove(event) {
         } else if (response && response.error) {
           updateCardWordTooltip(response.error, true);
         } else {
-          updateCardWordTooltip("Hata!", true);
+          updateCardWordTooltip(getText("error"), true);
         }
       }
     );
@@ -395,6 +438,19 @@ function resetPageHover() {
   currentHoveredWord = "";
   removeTooltip();
   removeHighlight();
+}
+
+function updateVisibleInterfaceText() {
+  const selectionButton = document.getElementById("qt-selection-button");
+  if (selectionButton) selectionButton.innerText = getText("translateButton");
+
+  const arrowEl = document.querySelector("#qt-selection-card .qt-card-arrow");
+  if (arrowEl) arrowEl.innerText = getText("translationLabel");
+
+  const translatedEl = document.getElementById("qt-card-translated-text");
+  if (translatedEl && translatedEl.dataset.state === "loading") {
+    translatedEl.innerText = getText("translating");
+  }
 }
 
 // --- Yardımcı Fonksiyonlar ---

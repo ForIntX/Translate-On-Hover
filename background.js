@@ -10,6 +10,46 @@ const translationCache = new Map(); // key: `${text}_${targetLang}_${mode}` -> {
 const requestQueue = [];
 let isProcessing = false;
 
+const UI_TEXT = {
+  tr: {
+    emptyText: "Çevrilecek metin boş.",
+    apiNotConfigured: "API yapılandırılmadı. Eklenti ayarlarından bir çeviri API'si ekleyin.",
+    translationFailed: "Çeviri alınamadı",
+    apiHttpError: (status) => `API hatası: HTTP ${status}`,
+    translationNotFound: "Çeviri bulunamadı (responsePath ayarını kontrol edin)",
+  },
+  en: {
+    emptyText: "There is no text to translate.",
+    apiNotConfigured: "API is not configured. Add a translation API from the extension settings.",
+    translationFailed: "Could not get translation",
+    apiHttpError: (status) => `API error: HTTP ${status}`,
+    translationNotFound: "Translation not found (check the responsePath setting)",
+  },
+};
+
+function getUiLang(lang) {
+  return UI_TEXT[lang] ? lang : "tr";
+}
+
+function getText(lang, key, ...args) {
+  const value = UI_TEXT[getUiLang(lang)][key] || UI_TEXT.tr[key] || key;
+  return typeof value === "function" ? value(...args) : value;
+}
+
+function userError(key, ...args) {
+  const error = new Error(key);
+  error.userMessageKey = key;
+  error.userMessageArgs = args;
+  return error;
+}
+
+function formatError(error, lang) {
+  if (error && error.userMessageKey) {
+    return getText(lang, error.userMessageKey, ...(error.userMessageArgs || []));
+  }
+  return error?.message || getText(lang, "translationFailed");
+}
+
 chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
   if (request.action === "translate") {
     handleTranslateRequest(request, sendResponse);
@@ -20,11 +60,12 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
 async function handleTranslateRequest(request, sendResponse) {
   const text = normalizeInputText(request.text);
   const targetLang = request.targetLang || "tr";
+  const uiLang = getUiLang(request.uiLang);
   const shouldChunk = request.chunk === true;
   const cacheKey = `${text.toLowerCase()}_${targetLang}_${shouldChunk ? "chunked" : "single"}`;
 
   if (!text) {
-    sendResponse({ error: "Çevrilecek metin boş." });
+    sendResponse({ error: getText(uiLang, "emptyText") });
     return;
   }
 
@@ -38,7 +79,7 @@ async function handleTranslateRequest(request, sendResponse) {
   const { apiConfig } = await chrome.storage.sync.get(["apiConfig"]);
   if (!apiConfig || !apiConfig.url) {
     sendResponse({
-      error: "API yapılandırılmadı. Eklenti ayarlarından bir çeviri API'si ekleyin.",
+      error: getText(uiLang, "apiNotConfigured"),
       needsConfig: true,
     });
     return;
@@ -46,7 +87,7 @@ async function handleTranslateRequest(request, sendResponse) {
 
   // 3. Kuyruğa ekle (aynı kelime+dil için bekleyen başka istekler varsa, hepsi
   //    tek API çağrısıyla birlikte cevaplanacak)
-  requestQueue.push({ text, targetLang, cacheKey, apiConfig, shouldChunk, sendResponse });
+  requestQueue.push({ text, targetLang, uiLang, cacheKey, apiConfig, shouldChunk, sendResponse });
   processQueue();
 }
 
@@ -55,7 +96,7 @@ function processQueue() {
   isProcessing = true;
 
   const job = requestQueue.shift();
-  const { text, targetLang, cacheKey, apiConfig, shouldChunk } = job;
+  const { text, targetLang, uiLang, cacheKey, apiConfig, shouldChunk } = job;
 
   const sameKeyJobs = [job];
   for (let i = requestQueue.length - 1; i >= 0; i--) {
@@ -73,8 +114,9 @@ function processQueue() {
       })
       .catch((error) => {
         console.error("Çeviri API hatası:", error);
-        const errResult = { error: error.message || "Çeviri alınamadı" };
-        for (const j of sameKeyJobs) j.sendResponse(errResult);
+        for (const j of sameKeyJobs) {
+          j.sendResponse({ error: formatError(error, j.uiLang || uiLang) });
+        }
       })
       .finally(() => {
         isProcessing = false;
@@ -154,7 +196,7 @@ async function fetchFromCustomApi(text, targetLang, apiConfig) {
 
   const response = await fetch(url, fetchOptions);
   if (!response.ok) {
-    throw new Error(`API hatası: HTTP ${response.status}`);
+    throw userError("apiHttpError", response.status);
   }
 
   const data = await response.json();
@@ -162,7 +204,7 @@ async function fetchFromCustomApi(text, targetLang, apiConfig) {
   const translationText = normalizeTranslationValue(translation);
 
   if (!translationText) {
-    throw new Error("Çeviri bulunamadı (responsePath ayarını kontrol edin)");
+    throw userError("translationNotFound");
   }
 
   return { translation: translationText };

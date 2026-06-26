@@ -148,10 +148,18 @@
   </style>
 </head>
 <body>
-  <h1>🔤 Translate on Hover</h1>
+  <h1 data-i18n="appTitle">🔤 Translate on Hover</h1>
+
+  <div class="field">
+    <label for="interfaceLang" data-i18n="interfaceLanguage">Uygulama dili</label>
+    <select id="interfaceLang">
+      <option value="tr" data-label-key="languageTurkish">Türkçe</option>
+      <option value="en" data-label-key="languageEnglish">İngilizce</option>
+    </select>
+  </div>
 
   <div class="row">
-    <label for="enabled">Etkin</label>
+    <label for="enabled" data-i18n="enabled">Etkin</label>
     <label class="switch">
       <input type="checkbox" id="enabled" />
       <span class="slider"></span>
@@ -159,37 +167,37 @@
   </div>
 
   <div class="field">
-    <label for="targetLang">Hedef dil</label>
+    <label for="targetLang" data-i18n="targetLanguage">Hedef dil</label>
     <select id="targetLang">
-      <option value="tr">Türkçe</option>
-      <option value="en">İngilizce</option>
-      <option value="de">Almanca</option>
-      <option value="fr">Fransızca</option>
-      <option value="es">İspanyolca</option>
-      <option value="ru">Rusça</option>
-      <option value="ar">Arapça</option>
-      <option value="it">İtalyanca</option>
-      <option value="ja">Japonca</option>
+      <option value="tr" data-label-key="languageTurkish">Türkçe</option>
+      <option value="en" data-label-key="languageEnglish">İngilizce</option>
+      <option value="de" data-label-key="languageGerman">Almanca</option>
+      <option value="fr" data-label-key="languageFrench">Fransızca</option>
+      <option value="es" data-label-key="languageSpanish">İspanyolca</option>
+      <option value="ru" data-label-key="languageRussian">Rusça</option>
+      <option value="ar" data-label-key="languageArabic">Arapça</option>
+      <option value="it" data-label-key="languageItalian">İtalyanca</option>
+      <option value="ja" data-label-key="languageJapanese">Japonca</option>
     </select>
   </div>
 
   <div class="field">
-    <label for="delay">Bekleme (ms)</label>
+    <label for="delay" data-i18n="delay">Bekleme (ms)</label>
     <input type="number" id="delay" min="0" max="2000" step="50" />
   </div>
 
-  <h2>Çeviri API'si</h2>
+  <h2 data-i18n="translationApi">Çeviri API'si</h2>
   <div class="no-api-warning" id="noApiWarning">
     ⚠️ Henüz bir çeviri API'si eklemediniz. Çeviri çalışmayacak.
   </div>
 
   <div class="field">
-    <label for="apiPaste">API yapılandırmanı buraya yapıştır (JSON)</label>
+    <label for="apiPaste" data-i18n="apiPasteLabel">API yapılandırmanı buraya yapıştır (JSON)</label>
     <textarea id="apiPaste" placeholder='{"url": "...", "method": "POST", "headers": {...}, "bodyTemplate": "...", "responsePath": "..."}'></textarea>
   </div>
 
   <details>
-    <summary>JSON formatı nasıl olmalı?</summary>
+    <summary data-i18n="formatSummary">JSON formatı nasıl olmalı?</summary>
     <div class="example-box">{
   "url": "https://.../translate",
   "method": "POST",
@@ -197,7 +205,7 @@
   "bodyTemplate": "{\"q\":\"{{text}}\",\"target\":\"{{targetLang}}\"}",
   "responsePath": "data.translations.0.translatedText"
 }</div>
-    <div class="hint">
+    <div class="hint" id="formatHint">
       <code>{{text}}</code> ve <code>{{targetLang}}</code> yer tutucuları
       URL veya bodyTemplate içinde otomatik değiştirilir. GET istekleri için
       headers ve bodyTemplate'i boş bırakabilirsiniz. Hazır örnekler
@@ -206,7 +214,7 @@
     </div>
   </details>
 
-  <button id="saveApi">Kaydet</button>
+  <button id="saveApi" data-i18n="save">Kaydet</button>
   <div id="apiStatus"></div>
 
   <script src="popup.js"></script>
